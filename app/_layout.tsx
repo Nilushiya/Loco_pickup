@@ -1,12 +1,11 @@
-import { useEffect, useState } from 'react';
-import { Stack, useRouter, useSegments } from 'expo-router';
-import { Provider, useDispatch, useSelector } from 'react-redux';
-import { store } from '../redux/store';
-import * as SecureStore from 'expo-secure-store';
-import { authSuccess, logout } from '../redux/slices/authSlice';
-import { ActivityIndicator, View } from 'react-native';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { useColorScheme } from 'react-native';
+import { Stack, useRouter, useSegments } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, useColorScheme, View } from 'react-native';
+import { Provider, useDispatch, useSelector } from 'react-redux';
+import { authSuccess } from '../redux/slices/authSlice';
+import { store } from '../redux/store';
 
 function RootLayoutNav() {
   const { token, role } = useSelector((state: any) => state.auth);
@@ -42,17 +41,17 @@ function RootLayoutNav() {
     if (!isReady) return; // Don't navigate until we've checked SecureStore
 
     const inAuthGroup = (segments[0] as string) === '(auth)';
+    const inRiderGroup = (segments[0] as string) === '(rider)';
 
     if (!token) {
-      // If no token, force user to Login
-      if (!inAuthGroup) {
-       router.replace('/(auth)/login' as any);
+      if (!inAuthGroup && !inRiderGroup) {
+        // By default sent to rider if bypassing auth
+        router.replace('/(rider)' as any);
       }
     } else {
-      // If token exists, direct them to their specific folder
-      if (role === 'User') {
-        router.replace('/(user)' as any);
-      } 
+      if (!inRiderGroup) {
+        router.replace('/(rider)' as any);
+      }
     }
   }, [token, role, isReady, segments]);
 
@@ -68,8 +67,8 @@ function RootLayoutNav() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="(user)" />
-    </Stack>
+        <Stack.Screen name="(rider)" />
+      </Stack>
     </ThemeProvider>
   );
 }

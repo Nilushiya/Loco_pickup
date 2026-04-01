@@ -24,12 +24,16 @@ const SignupScreen = ({ navigation }: SignupScreenProps) => {
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [vehicleType, setVehicleType] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
   const [errors, setErrors] = useState<{
     username?: string;
     email?: string;
+    phoneNumber?: string;
+    vehicleType?: string;
     password?: string;
     confirmPassword?: string;
   }>({});
@@ -38,6 +42,8 @@ const SignupScreen = ({ navigation }: SignupScreenProps) => {
     let newErrors: {
       username?: string;
       email?: string;
+      phoneNumber?: string;
+      vehicleType?: string;
       password?: string;
       confirmPassword?: string;
     } = {};
@@ -56,6 +62,18 @@ const SignupScreen = ({ navigation }: SignupScreenProps) => {
       newErrors.email = "Email is required";
     } else if (!/^\S+@\S+\.\S+$/.test(email)) {
       newErrors.email = "Invalid email format";
+    }
+
+    // Phone Number
+    if (!phoneNumber) {
+      newErrors.phoneNumber = "Phone Number is required";
+    } else if (phoneNumber.length < 10) {
+      newErrors.phoneNumber = "Minimum 10 digits required";
+    }
+
+    // Vehicle Type
+    if (!vehicleType) {
+      newErrors.vehicleType = "Vehicle Type is required";
     }
 
     // Password
@@ -85,7 +103,7 @@ const SignupScreen = ({ navigation }: SignupScreenProps) => {
     if (!validate()) return;
 
     try {
-      authService.signup({ username, email, password });
+      authService.signup({ username, email, phoneNumber, vehicleType, password, role: 'Rider' });
       Alert.alert("Success", "Account created!");
       navigation.navigate("login");
     } catch (error: any) {
@@ -122,8 +140,26 @@ return (
           style={styles.input}
           value={email}
           onChangeText={setEmail}
+          keyboardType="email-address"
         />
         {errors.email && <Text style={styles.error}>{errors.email}</Text>}
+
+        <TextInput
+          placeholder="Phone Number"
+          style={styles.input}
+          value={phoneNumber}
+          onChangeText={setPhoneNumber}
+          keyboardType="phone-pad"
+        />
+        {errors.phoneNumber && <Text style={styles.error}>{errors.phoneNumber}</Text>}
+
+        <TextInput
+          placeholder="Vehicle Type (e.g. Bike, Car)"
+          style={styles.input}
+          value={vehicleType}
+          onChangeText={setVehicleType}
+        />
+        {errors.vehicleType && <Text style={styles.error}>{errors.vehicleType}</Text>}
 
         <TextInput
           placeholder="Password"
