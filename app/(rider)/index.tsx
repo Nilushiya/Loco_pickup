@@ -20,9 +20,11 @@ import { Colors } from '../../constants/theme';
 
 const mockOrder = {
   id: 'order_1',
-  amount: 15.5,
-  pickupLocation: '123 Main St, New York',
-  dropoffLocation: '456 Market St, New York',
+  amount: 250.0,
+  pickupLocation: 'Restaurant near University of Kelaniya',
+  dropoffLocation: 'Kelaniya Railway Station',
+  pickupCoords: { latitude: 6.9744, longitude: 79.9161 },
+  dropoffCoords: { latitude: 6.9535, longitude: 79.9130 },
   distance: 3.2,
 };
 
