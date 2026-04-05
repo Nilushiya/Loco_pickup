@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   StyleSheet,
   Switch,
   Text,
@@ -10,8 +11,11 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSelector } from 'react-redux';
+import apiClient from '../../api/client';
 import DashboardMap from '../../components/DashboardMap.native';
 import OrderModal from '../../components/OrderModal';
+import { ENDPOINTS } from '../../constants/Config';
 import { Colors } from '../../constants/theme';
 
 const mockOrder = {
@@ -24,6 +28,7 @@ const mockOrder = {
 
 export default function RiderDashboard() {
   const router = useRouter();
+  const { id: userId } = useSelector((state: any) => state.auth);
   const [isOnline, setIsOnline] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
 
@@ -47,8 +52,23 @@ export default function RiderDashboard() {
     };
   }, [isOnline]);
 
-  const toggleOnline = () => {
-    setIsOnline((prev) => !prev);
+  const toggleOnline = async () => {
+    const newStatus = !isOnline;
+    setIsOnline(newStatus); // Optimistic UI update
+
+    try {
+      console.log("Updating availability to", newStatus);
+      console.log("User id", userId);
+      const response = await apiClient.put(ENDPOINTS.UPDATE_AVAILABILITY, {
+        availability: newStatus,
+        id: userId, // Added from Redux as requested
+      });
+      console.log(`Availability updated to ${newStatus}`, response.data);
+    } catch (error) {
+      console.error('Failed to update availability:', error);
+      Alert.alert('Error', 'Could not update your availability. Please try again.');
+      setIsOnline(!newStatus); // Revert UI
+    }
   };
 
   const handleAcceptOrder = async () => {
