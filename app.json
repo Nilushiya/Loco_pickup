@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Loco_munch_App",
-    "slug": "Loco_munch_App",
+    "name": "Loco_pickup_App",
+    "slug": "Loco_pickup_App",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "locomunchapp",
+    "scheme": "locopickupapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {

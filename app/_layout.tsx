@@ -20,11 +20,18 @@ function RootLayoutNav() {
     const bootstrapAsync = async () => {
       try {
         const savedToken = await SecureStore.getItemAsync('userToken');
+        const savedId = await SecureStore.getItemAsync('userId');
         const savedRole = await SecureStore.getItemAsync('userRole');
 
         if (savedToken && savedRole) {
           // If found, hydrate Redux state
-          dispatch(authSuccess({ token: savedToken, role: savedRole }));
+          dispatch(
+            authSuccess({
+              token: savedToken,
+              id: savedId ? Number(savedId) : null,
+              role: savedRole,
+            })
+          );
         }
       } catch (e) {
         console.error("Failed to load token", e);
@@ -34,26 +41,29 @@ function RootLayoutNav() {
     };
 
     bootstrapAsync();
-  }, []);
+  }, [dispatch]);
 
   // 2. Role-Based Navigation Logic
   useEffect(() => {
-    if (!isReady) return; // Don't navigate until we've checked SecureStore
+    if (!isReady) return;
 
-    const inAuthGroup = (segments[0] as string) === '(auth)';
-    const inRiderGroup = (segments[0] as string) === '(rider)';
+    const inAuthGroup = segments[0] === '(auth)';
+    const inUserGroup = segments[0] === '(rider)';
 
-    if (!token) {
-      if (!inAuthGroup && !inRiderGroup) {
-        // By default sent to rider if bypassing auth
+    const checkInitialRoute = async () => {
+      if (!token) {
+        if (!inAuthGroup) {
+          router.replace('/(auth)/login' as any);
+        }
+        return;
+      }
+
+      if (role === 'PICKUP_PERSON' && !inUserGroup) {
         router.replace('/(rider)' as any);
       }
-    } else {
-      if (!inRiderGroup) {
-        router.replace('/(rider)' as any);
-      }
-    }
-  }, [token, role, isReady, segments]);
+    };
+    checkInitialRoute();
+  }, [token, role, isReady, router, segments]);
 
   // 3. Show a loading spinner while checking SecureStore
   if (!isReady) {
@@ -66,9 +76,9 @@ function RootLayoutNav() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(rider)" />
-      </Stack>
+      <Stack screenOptions={{ headerShown: false }} />
+      {/* <Stack.Screen name="(user)" /> */}
+      {/* </Stack> */}
     </ThemeProvider>
   );
 }
