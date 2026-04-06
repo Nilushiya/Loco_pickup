@@ -40,15 +40,17 @@ export default function RiderDashboard() {
   const [requests, setRequests] = useState<any[]>([]);
   const [isPolling, setIsPolling] = useState(false);
   const [activeRequestId, setActiveRequestId] = useState<number | null>(null);
+  const [isModalVisible, setIsModalVisible] = useState(false);
   const [todayEarnings] = useState(0);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const inFlightRef = useRef(false);
   const appStateRef = useRef(AppState.currentState);
   const hiddenRequestIdsRef = useRef<Set<number>>(new Set());
+  const modalTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const currentRequest = requests[0] ?? null;
-  const modalVisible = isOnline && Boolean(currentRequest);
+  const modalVisible = isOnline && Boolean(currentRequest) && isModalVisible;
 
   useEffect(() => {
     const loadPickupPerson = async () => {
@@ -173,8 +175,31 @@ export default function RiderDashboard() {
     if (!isOnline) {
       stopPolling();
       setRequests([]);
+      setIsModalVisible(false);
     }
   }, [isOnline, stopPolling]);
+
+  useEffect(() => {
+    if (modalTimeoutRef.current) {
+      clearTimeout(modalTimeoutRef.current);
+      modalTimeoutRef.current = null;
+    }
+
+    if (isOnline && currentRequest && activeRequestId === null) {
+      modalTimeoutRef.current = setTimeout(() => {
+        setIsModalVisible(true);
+      }, 120);
+    } else {
+      setIsModalVisible(false);
+    }
+
+    return () => {
+      if (modalTimeoutRef.current) {
+        clearTimeout(modalTimeoutRef.current);
+        modalTimeoutRef.current = null;
+      }
+    };
+  }, [activeRequestId, currentRequest, isOnline]);
 
   const toggleOnline = async () => {
     const newStatus = !isOnline;
@@ -223,13 +248,20 @@ export default function RiderDashboard() {
     try {
       setActiveRequestId(currentRequest.id);
       hiddenRequestIdsRef.current.add(currentRequest.id);
+      setIsModalVisible(false);
 
       await claimPickupOrder(
-        buildPickupClaimPayload(currentRequest, pickupPerson?.id )
+        buildPickupClaimPayload(currentRequest, pickupPerson?.id ?? userId)
       );
 
       removeRequestFromState(currentRequest.id);
-      await AsyncStorage.setItem('currentOrder', JSON.stringify(currentRequest));
+      await AsyncStorage.setItem(
+        'currentOrder',
+        JSON.stringify({
+          ...currentRequest,
+          pickupPersonId: pickupPerson?.id ?? userId,
+        })
+      );
       router.navigate('/(rider)/map' as any);
     } catch (error: any) {
       hiddenRequestIdsRef.current.delete(currentRequest.id);
@@ -253,6 +285,7 @@ export default function RiderDashboard() {
     try {
       setActiveRequestId(currentRequest.id);
       hiddenRequestIdsRef.current.add(currentRequest.id);
+      setIsModalVisible(false);
       removeRequestFromState(currentRequest.id);
     } catch (error: any) {
       hiddenRequestIdsRef.current.delete(currentRequest.id);

@@ -10,6 +10,40 @@ const toNullableNumber = (value) => {
   return Number.isNaN(numericValue) ? null : numericValue;
 };
 
+const normalizePickupOrderItems = (sourceItems = []) => {
+  if (!Array.isArray(sourceItems)) {
+    return [];
+  }
+
+  return sourceItems.map((item, index) => {
+    const quantity = Number(
+      item?.quantity ?? item?.qty ?? item?.count ?? 1
+    ) || 1;
+    const unitPrice = Number(
+      item?.price ?? item?.unitPrice ?? item?.amount ?? 0
+    ) || 0;
+
+    return {
+      id: item?.id ?? index,
+      name:
+        item?.name ||
+        item?.itemName ||
+        item?.menuItem?.name ||
+        'Order Item',
+      image:
+        item?.image ||
+        item?.imageUrl ||
+        item?.photo ||
+        item?.menuItem?.image ||
+        item?.menuItem?.imageUrl ||
+        '',
+      quantity,
+      unitPrice,
+      total: Number(item?.total ?? quantity * unitPrice) || 0,
+    };
+  });
+};
+
 const normalizePickupRequest = (order) => {
   if (!order?.id) {
     return null;
@@ -39,6 +73,19 @@ const normalizePickupRequest = (order) => {
     deliveryFee: Number(deliveryFee) || 0,
     pickupLocation: restaurantAddress,
     dropLocation: stationAddress,
+    restaurantName:
+      order?.restaurant?.name ||
+      order?.restaurantName ||
+      'Restaurant',
+    stationName:
+      order?.station?.name ||
+      order?.stationName ||
+      'Station',
+    trainName:
+      order?.train?.name ||
+      order?.train?.trainName ||
+      order?.trainName ||
+      'Train not available',
     userPhoneNumber:
       order?.user?.phoneNumber ||
       order?.userPhoneNumber ||
@@ -91,12 +138,85 @@ export const buildPickupClaimPayload = (request, pickupPersonId) => {
   };
 };
 
+export const fetchPickupOrderDetails = async ({ orderId, pickupPersonId }) => {
+  const response = await apiClient.get(ENDPOINTS.GET_PICKUP_ORDER_DETAILS(orderId), {
+    params: {
+      pickupPersonId,
+    },
+  });
+
+  const source = response?.data?.data ?? response?.data ?? {};
+  const items = normalizePickupOrderItems(
+    source?.items || source?.orderItems || source?.products || []
+  );
+
+  return {
+    id: source?.id ?? orderId,
+    totalAmount:
+      Number(
+        source?.totalAmount ??
+          source?.amount ??
+          source?.deliveryFee ??
+          items.reduce((sum, item) => sum + item.total, 0)
+      ) || 0,
+    userName:
+      source?.user?.firstname && source?.user?.lastname
+        ? `${source.user.firstname} ${source.user.lastname}`
+        : source?.user?.name ||
+          source?.customerName ||
+          source?.userName ||
+          'Customer',
+    userPhoneNumber:
+      source?.user?.phoneNumber ||
+      source?.userPhoneNumber ||
+      source?.customerPhoneNumber ||
+      '',
+    trainName:
+      source?.train?.name ||
+      source?.train?.trainName ||
+      source?.trainName ||
+      'Train not available',
+    stationName:
+      source?.station?.name ||
+      source?.stationName ||
+      'Station',
+    stationAddress:
+      source?.station?.address ||
+      source?.dropLocation ||
+      source?.dropoffLocation ||
+      '',
+    restaurantName:
+      source?.restaurant?.name ||
+      source?.restaurantName ||
+      'Restaurant',
+    restaurantAddress:
+      source?.restaurant?.address ||
+      source?.pickupLocation ||
+      '',
+    items,
+  };
+};
+
 export const claimPickupOrder = async (payload) => {
   const res = await apiClient.put(ENDPOINTS.CLAIM_PICKUP_ORDER, payload);
   console.log('Claim pickup order response:', res?.data, payload);
   return res;
 };
 
+export const pickupOrder = async (payload) => {
+  const res = await apiClient.put(ENDPOINTS.PICKUP_ORDER, payload);
+  console.log('Pickup order response:', res?.data, payload);
+  return res;
+};
+
+export const handoverOrder = async (payload) => {
+  const res = await apiClient.put(ENDPOINTS.HANDOVER_ORDER, payload);
+  console.log('Handover order response:', res?.data, payload);
+  return res;
+};
+
 export const cancelPickupOrder = async (payload) => {
-  return apiClient.put(ENDPOINTS.CANCEL_PICKUP_ORDER, payload);
+  const res = await apiClient.put(ENDPOINTS.CANCEL_PICKUP_ORDER, payload);
+  console.log('Cancel pickup order response:', res?.data, payload);
+  return res;
 };

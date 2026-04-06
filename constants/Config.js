@@ -47,6 +47,9 @@ export const ENDPOINTS = {
   UPDATE_AVAILABILITY: '/pickup-person/availability',
   GET_ORDERS_BY_STATUS: (status) => `/order/get-by-status/${status}`,
   CLAIM_PICKUP_ORDER: '/order/claim-pickup',
+  PICKUP_ORDER: '/order/pickup',
+  GET_PICKUP_ORDER_DETAILS: (orderId) => `/order/pickup/get/${orderId}`,
+  HANDOVER_ORDER: '/order/handover',
   CANCEL_PICKUP_ORDER: '/order/cancel-pickup',
 
 

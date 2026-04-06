@@ -47,7 +47,10 @@ const OrderModal: React.FC<OrderModalProps> = ({
               />
               <View style={styles.textWrap}>
                 <Text style={styles.label}>Pickup</Text>
-                <Text style={styles.value}>{order.pickupLocation}</Text>
+                <Text style={styles.value}>
+                  {order.restaurantName || 'Restaurant'}
+                </Text>
+                <Text style={styles.subValue}>{order.pickupLocation}</Text>
               </View>
             </View>
 
@@ -60,8 +63,25 @@ const OrderModal: React.FC<OrderModalProps> = ({
                 color="#4CAF50"
               />
               <View style={styles.textWrap}>
-                <Text style={styles.label}>Drop-off</Text>
-                <Text style={styles.value}>{order.dropLocation}</Text>
+                <Text style={styles.label}>Delivery Station</Text>
+                <Text style={styles.value}>{order.stationName || 'Station'}</Text>
+                <Text style={styles.subValue}>{order.dropLocation}</Text>
+              </View>
+            </View>
+
+            <View style={styles.dashedLine} />
+
+            <View style={styles.row}>
+              <MaterialCommunityIcons
+                name="train"
+                size={24}
+                color="#4A6CF7"
+              />
+              <View style={styles.textWrap}>
+                <Text style={styles.label}>Train</Text>
+                <Text style={styles.value}>
+                  {order.trainName || 'Train not available'}
+                </Text>
               </View>
             </View>
 
@@ -93,7 +113,7 @@ const OrderModal: React.FC<OrderModalProps> = ({
               style={[styles.button, styles.acceptBtn]}
               onPress={onAccept}
             >
-              <Text style={styles.acceptText}>Accept</Text>
+              <Text style={styles.acceptText}>ACCEPT</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -111,13 +131,14 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContainer: {
-    width: width,
+    width: '100%',
     backgroundColor: 'white',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
     paddingTop: 14,
     paddingBottom: 26,
+    maxHeight: '78%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.18,
@@ -161,7 +182,7 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginVertical: 10,
   },
   textWrap: {
@@ -174,8 +195,14 @@ const styles = StyleSheet.create({
   },
   value: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '600',
     color: '#333',
+  },
+  subValue: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 3,
+    lineHeight: 20,
   },
   dashedLine: {
     height: 1,
