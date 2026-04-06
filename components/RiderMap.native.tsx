@@ -34,9 +34,9 @@ export default function RiderMapScreen() {
   const [locationError, setLocationError] = useState('');
   const mapRef = React.useRef<MapView>(null);
 
-  // Mock locations for the order (These would come from the API)
-  const pickupCoords = { latitude: 40.7155, longitude: -74.0048 };
-  const dropoffCoords = { latitude: 40.7220, longitude: -73.9980 };
+  // Locations for the order (From API/Redux dynamically)
+  const pickupCoords = order?.pickupCoords || { latitude: 6.9744, longitude: 79.9161 };
+  const dropoffCoords = order?.dropoffCoords || { latitude: 6.9535, longitude: 79.9130 };
 
   useEffect(() => {
     loadOrder();
@@ -153,10 +153,8 @@ export default function RiderMapScreen() {
 
   // Determine routing parameters
   const getOrigin = () => {
-    if (orderState === 'heading_to_pickup' || orderState === 'arrived') {
-      return riderLocation || pickupCoords; // Route from Rider -> Pickup
-    }
-    return pickupCoords; // Route from Pickup -> Dropoff
+    // PickMe tracking: Route always originates from the rider's LIVE location
+    return riderLocation || pickupCoords; 
   };
 
   const getDestination = () => {
@@ -174,8 +172,8 @@ export default function RiderMapScreen() {
         showsUserLocation={true}
         showsMyLocationButton={true}
         initialRegion={{
-          latitude: riderLocation?.latitude || 40.7150,
-          longitude: riderLocation?.longitude || -74.0050,
+          latitude: riderLocation?.latitude || 6.9744,
+          longitude: riderLocation?.longitude || 79.9161,
           latitudeDelta: 0.05,
           longitudeDelta: 0.05,
         }}

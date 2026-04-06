@@ -4,15 +4,32 @@ import * as SecureStore from 'expo-secure-store';
 import React from 'react';
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { Colors } from '../../constants/theme';
 import { logout } from '../../redux/slices/authSlice';
+import apiClient from '../../api/client';
+import { ENDPOINTS } from '../../constants/Config';
 
 export default function RiderProfileScreen() {
   const dispatch = useDispatch();
   const router = useRouter();
+  const { id } = useSelector((state: any) => state.auth);
 
   const handleLogout = async () => {
+    // Attempt to turn off availability before completely logging out
+    try {
+      if (id) {
+        await apiClient.put(ENDPOINTS.UPDATE_AVAILABILITY, {
+          availability: false,
+          id: Number(id),
+        });
+        console.log("Turned off availability during logout.");
+      }
+    } catch (error) {
+      // Backend returns 400 if it's already false, which is fine, no need to update.
+      console.log("Availability was already off or update failed.");
+    }
+
     await SecureStore.deleteItemAsync('userToken');
     await SecureStore.deleteItemAsync('userRole');
     dispatch(logout());
