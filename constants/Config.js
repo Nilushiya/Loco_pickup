@@ -51,6 +51,7 @@ export const ENDPOINTS = {
   GET_PICKUP_ORDER_DETAILS: (orderId) => `/order/pickup/get/${orderId}`,
   HANDOVER_ORDER: '/order/handover',
   CANCEL_PICKUP_ORDER: '/order/cancel-pickup',
+  GET_PICKUP_ORDERS: '/order/pickup/get',
 
 
   // User Role

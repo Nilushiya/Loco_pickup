@@ -91,6 +91,13 @@ const normalizePickupRequest = (order) => {
       order?.userPhoneNumber ||
       order?.customerPhoneNumber ||
       '',
+    userName:
+      order?.user?.firstname && order?.user?.lastname
+        ? `${order.user.firstname} ${order.user.lastname}`
+        : order?.user?.name ||
+          order?.customerName ||
+          order?.userName ||
+          'Customer',
     status: order.status,
     createdAt: order.createdAt || new Date().toISOString(),
     restaurantId: toNullableNumber(order?.restaurant?.id ?? order?.restaurantId),
@@ -114,6 +121,32 @@ const normalizePickupRequest = (order) => {
   };
 };
 
+export const categorizePickupOrderStatus = (status) => {
+  const normalized = String(status || '').toUpperCase();
+
+  if (normalized === 'ACCEPTED' || normalized === 'ASSIGNED') {
+    return 'ACCEPTED';
+  }
+
+  if (normalized === 'PICKUP' || normalized === 'PICKEDUP') {
+    return 'PICKEDUP';
+  }
+
+  if (
+    normalized === 'HANDOVER' ||
+    normalized === 'HANDED_OVER' ||
+    normalized === 'COMPLETED'
+  ) {
+    return 'COMPLETED';
+  }
+
+  if (normalized === 'CANCEL' || normalized === 'CANCELLED') {
+    return 'CANCEL';
+  }
+
+  return normalized || 'UNKNOWN';
+};
+
 export const fetchOrdersByStatus = async (status) => {
   const response = await apiClient.get(ENDPOINTS.GET_ORDERS_BY_STATUS(status));
 
@@ -126,6 +159,28 @@ export const fetchOrdersByStatus = async (status) => {
   return source
     .map(normalizePickupRequest)
     .filter(Boolean);
+};
+
+export const fetchPickupOrdersForPerson = async ({ pickupPersonId }) => {
+  const response = await apiClient.get(ENDPOINTS.GET_PICKUP_ORDERS, {
+    params: {
+      pickupPersonId,
+    },
+  });
+
+  const source = Array.isArray(response?.data?.data)
+    ? response.data.data
+    : Array.isArray(response?.data)
+      ? response.data
+      : [];
+
+  return source
+    .map(normalizePickupRequest)
+    .filter(Boolean)
+    .map((order) => ({
+      ...order,
+      category: categorizePickupOrderStatus(order.status),
+    }));
 };
 
 export const buildPickupClaimPayload = (request, pickupPersonId) => {
@@ -144,7 +199,7 @@ export const fetchPickupOrderDetails = async ({ orderId, pickupPersonId }) => {
       pickupPersonId,
     },
   });
-
+  
   const source = response?.data?.data ?? response?.data ?? {};
   const items = normalizePickupOrderItems(
     source?.items || source?.orderItems || source?.products || []
