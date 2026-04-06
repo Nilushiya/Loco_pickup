@@ -15,6 +15,7 @@ const restaurantRegistrationSlice = createSlice({
       state.isSubmitting = true;
       state.error = null;
       state.successMessage = '';
+      
     },
     registrationSuccess: (state, action) => {
       state.isSubmitting = false;
