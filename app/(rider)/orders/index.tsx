@@ -81,13 +81,36 @@ export default function RiderOrdersScreen() {
   }, [id, token]);
 
   const filteredOrders = useMemo(() => {
-    return orders.filter((order) => {
+    return [...orders]
+      .sort((a, b) => Number(b?.id || 0) - Number(a?.id || 0))
+      .filter((order) => {
       const category = categorizePickupOrderStatus(
         order?.category || order?.status
       );
       return category === activeFilter;
-    });
+      });
   }, [activeFilter, orders]);
+
+  const statusCounts = useMemo(() => {
+    return FILTERS.reduce<Record<OrderFilter, number>>(
+      (acc, filter) => {
+        acc[filter] = orders.filter((order) => {
+          const category = categorizePickupOrderStatus(
+            order?.category || order?.status
+          );
+          return category === filter;
+        }).length;
+
+        return acc;
+      },
+      {
+        ACCEPTED: 0,
+        PICKEDUP: 0,
+        COMPLETED: 0,
+        CANCEL: 0,
+      }
+    );
+  }, [orders]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -112,6 +135,14 @@ export default function RiderOrdersScreen() {
               style={[styles.filterChip, isActive && styles.filterChipActive]}
               onPress={() => setActiveFilter(filter)}
             >
+              <Text
+                style={[
+                  styles.filterChipCount,
+                  isActive && styles.filterChipCountActive,
+                ]}
+              >
+                {String(statusCounts[filter]).padStart(2, '0')}
+              </Text>
               <Text
                 style={[
                   styles.filterChipText,
@@ -230,7 +261,7 @@ export default function RiderOrdersScreen() {
 
               <View style={styles.cardBottom}>
                 <Text style={styles.amountText}>
-                  Rs. {Number(order.total || 0).toFixed(2)}
+                  Rs. {Number(order.total).toFixed(2)}
                 </Text>
                 <Text style={styles.detailsLink}>View details</Text>
               </View>
@@ -269,17 +300,33 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   filterChip: {
-    paddingHorizontal: 16,
+    width: 118,
+    minHeight: 74,
+    paddingHorizontal: 12,
     paddingVertical: 10,
-    borderRadius: 20,
+    borderRadius: 22,
     backgroundColor: '#FFF0E8',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   filterChipActive: {
     backgroundColor: Colors.default.primary,
   },
+  filterChipCount: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: Colors.default.primary,
+    lineHeight: 24,
+  },
+  filterChipCountActive: {
+    color: '#fff',
+  },
   filterChipText: {
+    marginTop: 4,
+    fontSize: 12,
     fontWeight: '700',
     color: Colors.default.primary,
+    textAlign: 'center',
   },
   filterChipTextActive: {
     color: '#fff',
