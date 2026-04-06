@@ -35,8 +35,8 @@ export default function RiderLayout() {
       <Tabs.Screen
         name="orders"
         options={{
-          title: 'Orders',
-          tabBarIcon: ({ color }) => <MaterialIcons name="receipt-long" size={24} color={color} />,
+          title: 'History',
+          tabBarIcon: ({ color }) => <MaterialIcons name="history-toggle-off" size={24} color={color} />,
         }}
       />
       <Tabs.Screen

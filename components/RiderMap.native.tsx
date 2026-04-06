@@ -248,7 +248,7 @@ export default function RiderMapScreen() {
         {
           text: "OK", onPress: () => {
             AsyncStorage.removeItem('currentOrder');
-            router.navigate('/(rider)/index' as any);
+              router.replace('/(rider)' as any);
           }
         }
       ]);
@@ -264,7 +264,7 @@ export default function RiderMapScreen() {
         {
           text: "Yes", onPress: () => {
             AsyncStorage.removeItem('currentOrder');
-            router.navigate('/(rider)/index' as any);
+            router.replace('/(rider)' as any);
           }
         }
       ]
@@ -276,7 +276,7 @@ export default function RiderMapScreen() {
       <View style={styles.noOrder}>
         <FontAwesome name="map-o" size={64} color="#ccc" />
         <Text style={styles.noOrderText}>No active orders</Text>
-        <TouchableOpacity style={styles.btnReturn} onPress={() => router.navigate('/(rider)/index' as any)}>
+        <TouchableOpacity style={styles.btnReturn} onPress={() => router.replace('/(rider)' as any)}>
           <Text style={{ color: 'white', fontWeight: 'bold' }}>Go back Home</Text>
         </TouchableOpacity>
       </View>
@@ -363,7 +363,7 @@ export default function RiderMapScreen() {
         ) : null}
       </MapView>
 
-      <TouchableOpacity style={styles.backBtn} onPress={() => router.navigate('/(rider)/index' as any)}>
+      <TouchableOpacity style={styles.backBtn} onPress={() => router.replace('/(rider)' as any)}>
         <MaterialCommunityIcons name="arrow-left" size={28} color="#333" />
       </TouchableOpacity>
 
