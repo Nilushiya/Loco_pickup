@@ -26,22 +26,32 @@ const normalizePickupOrderItems = (sourceItems = []) => {
     return {
       id: item?.id ?? index,
       name:
-        item?.name ||
-        item?.itemName ||
-        item?.menuItem?.name ||
+        item?.item?.name ||
         'Order Item',
       image:
-        item?.image ||
-        item?.imageUrl ||
-        item?.photo ||
-        item?.menuItem?.image ||
-        item?.menuItem?.imageUrl ||
+        item?.item?.image ||
         '',
       quantity,
       unitPrice,
       total: Number(item?.total ?? quantity * unitPrice) || 0,
     };
   });
+};
+
+const getCollectionFromResponse = (payload) => {
+  if (Array.isArray(payload?.data)) {
+    return payload.data;
+  }
+
+  if (Array.isArray(payload?.orders)) {
+    return payload.orders;
+  }
+
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  return [];
 };
 
 const normalizePickupRequest = (order) => {
@@ -70,6 +80,7 @@ const normalizePickupRequest = (order) => {
 
   return {
     id: order.id,
+    total: order.total,
     deliveryFee: Number(deliveryFee) || 0,
     pickupLocation: restaurantAddress,
     dropLocation: stationAddress,
@@ -100,6 +111,11 @@ const normalizePickupRequest = (order) => {
           'Customer',
     status: order.status,
     createdAt: order.createdAt || new Date().toISOString(),
+    totalAmount:
+      Number(order?.totalAmount ?? order?.amount ?? order?.deliveryFee ?? 0) || 0,
+    items: normalizePickupOrderItems(
+      order?.items || order?.orderItems || order?.products || []
+    ),
     restaurantId: toNullableNumber(order?.restaurant?.id ?? order?.restaurantId),
     trainId: toNullableNumber(order?.train?.id ?? order?.trainId),
     stationId: toNullableNumber(order?.station?.id ?? order?.stationId),
@@ -149,12 +165,7 @@ export const categorizePickupOrderStatus = (status) => {
 
 export const fetchOrdersByStatus = async (status) => {
   const response = await apiClient.get(ENDPOINTS.GET_ORDERS_BY_STATUS(status));
-
-  const source = Array.isArray(response?.data?.data)
-    ? response.data.data
-    : Array.isArray(response?.data)
-      ? response.data
-      : [];
+  const source = getCollectionFromResponse(response?.data);
 
   return source
     .map(normalizePickupRequest)
@@ -167,12 +178,8 @@ export const fetchPickupOrdersForPerson = async ({ pickupPersonId }) => {
       pickupPersonId,
     },
   });
-
-  const source = Array.isArray(response?.data?.data)
-    ? response.data.data
-    : Array.isArray(response?.data)
-      ? response.data
-      : [];
+  console.log('Raw pickup orders response:', response?.data);
+  const source = getCollectionFromResponse(response?.data);
 
   return source
     .map(normalizePickupRequest)
@@ -248,6 +255,9 @@ export const fetchPickupOrderDetails = async ({ orderId, pickupPersonId }) => {
       source?.restaurant?.address ||
       source?.pickupLocation ||
       '',
+    status: source?.status || '',
+    deliveryFee:
+      Number(source?.deliveryFee ?? source?.fee ?? source?.amount ?? 0) || 0,
     items,
   };
 };

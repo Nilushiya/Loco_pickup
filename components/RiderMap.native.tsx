@@ -47,7 +47,6 @@ export default function RiderMapScreen() {
   const [pickupOrderDetails, setPickupOrderDetails] = useState<any>(null);
   const [isSubmittingPickup, setIsSubmittingPickup] = useState(false);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
-  const [isSheetExpanded, setIsSheetExpanded] = useState(false);
   const [pickupCoords, setPickupCoords] = useState<{ latitude: number, longitude: number } | null>(null);
   const [dropoffCoords, setDropoffCoords] = useState<{ latitude: number, longitude: number } | null>(null);
 
@@ -244,26 +243,15 @@ export default function RiderMapScreen() {
         setIsSubmittingPickup(false);
       }
     } else if (orderState === 'delivering') {
-      try {
-        await handoverOrder(
-          buildPickupClaimPayload(order, order?.pickupPersonId)
-        );
-        setOrderState('delivered');
-        Alert.alert("Success", "Order handed over successfully!", [
-          {
-            text: "OK", onPress: () => {
-              AsyncStorage.removeItem('currentOrder');
-              router.replace('/(rider)/index' as any);
-            }
+      setOrderState('delivered');
+      Alert.alert("Success", "Order delivered successfully!", [
+        {
+          text: "OK", onPress: () => {
+            AsyncStorage.removeItem('currentOrder');
+            router.navigate('/(rider)/index' as any);
           }
-        ]);
-      } catch (error: any) {
-        Alert.alert(
-          'Handover Failed',
-          error?.response?.data?.message ||
-            'Could not hand over this order. Please try again.'
-        );
-      }
+        }
+      ]);
     }
   };
 
@@ -274,22 +262,9 @@ export default function RiderMapScreen() {
       [
         { text: "No", style: "cancel" },
         {
-          text: "Yes", onPress: async () => {
-            try {
-              await cancelPickupOrder(
-                buildPickupClaimPayload(order, order?.pickupPersonId)
-              );
-            } catch (error: any) {
-              Alert.alert(
-                'Cancel Failed',
-                error?.response?.data?.message ||
-                  'Could not cancel this order. Please try again.'
-              );
-              return;
-            }
-
+          text: "Yes", onPress: () => {
             AsyncStorage.removeItem('currentOrder');
-            router.replace('/(rider)/index' as any);
+            router.navigate('/(rider)/index' as any);
           }
         }
       ]
@@ -392,138 +367,109 @@ export default function RiderMapScreen() {
         <MaterialCommunityIcons name="arrow-left" size={28} color="#333" />
       </TouchableOpacity>
 
-      <View
-        style={[
-          styles.bottomSheet,
-          isSheetExpanded ? styles.bottomSheetExpanded : styles.bottomSheetCollapsed,
-        ]}
-      >
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={styles.sheetPeek}
-          onPress={() => setIsSheetExpanded((current) => !current)}
+      <View style={styles.bottomSheet}>
+        <View style={styles.dragHandle} />
+
+        <View style={styles.headerInfo}>
+          <Text style={styles.statusText}>{currentStepLabel()}</Text>
+          <Text style={styles.earningsText}>Rs. {detailTotalAmount.toFixed(2)}</Text>
+        </View>
+
+        <ScrollView
+          style={styles.sheetScroll}
+          contentContainerStyle={styles.sheetScrollContent}
+          showsVerticalScrollIndicator={false}
         >
-          <View style={styles.dragHandle} />
-          <View style={styles.peekRow}>
-            <View style={styles.peekTextWrap}>
-              <Text style={styles.statusText}>{currentStepLabel()}</Text>
-              <Text style={styles.peekHint}>
-                {isSheetExpanded ? 'Hide details' : 'Show details'}
-              </Text>
-            </View>
-            <View style={styles.peekRight}>
-              <Text style={styles.earningsText}>Rs. {detailTotalAmount.toFixed(2)}</Text>
-              <MaterialCommunityIcons
-                name={isSheetExpanded ? 'chevron-down' : 'chevron-up'}
-                size={24}
-                color="#666"
-              />
-            </View>
-          </View>
-        </TouchableOpacity>
-
-        {isSheetExpanded ? (
-          <>
-            <ScrollView
-              style={styles.sheetScroll}
-              contentContainerStyle={styles.sheetScrollContent}
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={styles.addressList}>
-              {orderState === 'heading_to_pickup' || orderState === 'arrived' ? (
-                <>
-                  <View style={styles.activeLoc}>
-                    <Text style={styles.locLabel}>Restaurant</Text>
-                    <Text style={styles.locVal}>{restaurantDisplayName}</Text>
-                    <Text style={styles.locSubVal}>{restaurantDisplayAddress}</Text>
-                  </View>
-                  {orderState === 'arrived' ? (
-                    <>
-                      <View style={styles.addressDivider} />
-                      <View style={styles.activeLoc}>
-                        <Text style={styles.locLabel}>Order Items</Text>
-                        {isLoadingDetails ? (
-                          <Text style={styles.locSubVal}>Loading items...</Text>
-                        ) : detailItems.length > 0 ? (
-                          detailItems.map((item: any) => (
-                            <View key={String(item.id)} style={styles.itemRow}>
-                              {item.image ? (
-                                <Image
-                                  source={{ uri: item.image }}
-                                  style={styles.itemImage}
-                                />
-                              ) : (
-                                <View style={styles.itemPlaceholder}>
-                                  <MaterialCommunityIcons
-                                    name="food-outline"
-                                    size={18}
-                                    color="#7D7D7D"
-                                  />
-                                </View>
-                              )}
-                              <View style={styles.itemInfo}>
-                                <Text style={styles.itemName}>{item.name}</Text>
-                                <Text style={styles.itemMeta}>
-                                  Qty {item.quantity} x Rs. {Number(item.unitPrice || 0).toFixed(2)}
-                                </Text>
-                              </View>
-                              <Text style={styles.itemTotal}>
-                                Rs. {Number(item.total || 0).toFixed(2)}
-                              </Text>
-                            </View>
-                          ))
-                        ) : (
-                          <Text style={styles.locSubVal}>No item details available.</Text>
-                        )}
-                      </View>
-                      <View style={styles.addressDivider} />
-                      <View style={styles.activeLoc}>
-                        <Text style={styles.locLabel}>Total Amount</Text>
-                        <Text style={styles.locVal}>Rs. {detailTotalAmount.toFixed(2)}</Text>
-                      </View>
-                    </>
-                  ) : null}
-                </>
-              ) : (
-                <>
-                  <View style={styles.activeLoc}>
-                    <Text style={styles.locLabel}>Drop Point</Text>
-                    <Text style={styles.locVal}>{stationDisplayName}</Text>
-                    <Text style={styles.locSubVal}>{stationDisplayAddress}</Text>
-                  </View>
-                  <View style={styles.addressDivider} />
-                  <View style={styles.activeLoc}>
-                    <Text style={styles.locLabel}>User</Text>
-                    <Text style={styles.locVal}>{deliveryUserName}</Text>
-                    <Text style={styles.locSubVal}>{deliveryUserPhone}</Text>
-                  </View>
-                  <View style={styles.addressDivider} />
-                  <View style={styles.activeLoc}>
-                    <Text style={styles.locLabel}>Train</Text>
-                    <Text style={styles.locVal}>{trainDisplayName}</Text>
-                  </View>
-                </>
-              )}
+          <View style={styles.addressList}>
+          {orderState === 'heading_to_pickup' || orderState === 'arrived' ? (
+            <>
+              <View style={styles.activeLoc}>
+                <Text style={styles.locLabel}>Restaurant</Text>
+                <Text style={styles.locVal}>{restaurantDisplayName}</Text>
+                <Text style={styles.locSubVal}>{restaurantDisplayAddress}</Text>
               </View>
-            </ScrollView>
+              {orderState === 'arrived' ? (
+                <>
+                  <View style={styles.addressDivider} />
+                  <View style={styles.activeLoc}>
+                    <Text style={styles.locLabel}>Order Items</Text>
+                    {isLoadingDetails ? (
+                      <Text style={styles.locSubVal}>Loading items...</Text>
+                    ) : detailItems.length > 0 ? (
+                      detailItems.map((item: any) => (
+                        <View key={String(item.id)} style={styles.itemRow}>
+                          {item.image ? (
+                            <Image
+                              source={{ uri: item.image }}
+                              style={styles.itemImage}
+                            />
+                          ) : (
+                            <View style={styles.itemPlaceholder}>
+                              <MaterialCommunityIcons
+                                name="food-outline"
+                                size={18}
+                                color="#7D7D7D"
+                              />
+                            </View>
+                          )}
+                          <View style={styles.itemInfo}>
+                            <Text style={styles.itemName}>{item.name}</Text>
+                            <Text style={styles.itemMeta}>
+                              Qty {item.quantity} x Rs. {Number(item.unitPrice || 0).toFixed(2)}
+                            </Text>
+                          </View>
+                          <Text style={styles.itemTotal}>
+                            Rs. {Number(item.total || 0).toFixed(2)}
+                          </Text>
+                        </View>
+                      ))
+                    ) : (
+                      <Text style={styles.locSubVal}>No item details available.</Text>
+                    )}
+                  </View>
+                  <View style={styles.addressDivider} />
+                  <View style={styles.activeLoc}>
+                    <Text style={styles.locLabel}>Total Amount</Text>
+                    <Text style={styles.locVal}>Rs. {detailTotalAmount.toFixed(2)}</Text>
+                  </View>
+                </>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <View style={styles.activeLoc}>
+                <Text style={styles.locLabel}>Drop Point</Text>
+                <Text style={styles.locVal}>{stationDisplayName}</Text>
+                <Text style={styles.locSubVal}>{stationDisplayAddress}</Text>
+              </View>
+              <View style={styles.addressDivider} />
+              <View style={styles.activeLoc}>
+                <Text style={styles.locLabel}>User</Text>
+                <Text style={styles.locVal}>{deliveryUserName}</Text>
+                <Text style={styles.locSubVal}>{deliveryUserPhone}</Text>
+              </View>
+              <View style={styles.addressDivider} />
+              <View style={styles.activeLoc}>
+                <Text style={styles.locLabel}>Train</Text>
+                <Text style={styles.locVal}>{trainDisplayName}</Text>
+              </View>
+            </>
+          )}
+          </View>
+        </ScrollView>
 
-            <View style={styles.actionButtons}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={handleCancel}>
-                <Text style={styles.cancelBtnTxt}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.primaryBtn} onPress={handleAction}>
-                <Text style={styles.primaryBtnTxt}>
-                  {orderState === 'heading_to_pickup'
-                    ? 'ARRIVED TO SHOP'
-                    : orderState === 'arrived'
-                      ? (isSubmittingPickup ? 'SAVING...' : 'PICKUP')
-                      : 'HANDOVER'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </>
-        ) : null}
-      </View>
+        <View style={styles.actionButtons}>
+          <TouchableOpacity style={styles.cancelBtn} onPress={handleCancel}>
+            <Text style={styles.cancelBtnTxt}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.primaryBtn} onPress={handleAction}>
+            <Text style={styles.primaryBtnTxt}>
+              {orderState === 'heading_to_pickup' ? 'Arrived at Pickup' :
+                orderState === 'arrived' ? (isSubmittingPickup ? 'Saving...' : 'I Picked Up') : 'Delivered'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+  </View>
     </View>
   );
 }
@@ -564,14 +510,6 @@ const styles = StyleSheet.create({
     elevation: 10,
     maxHeight: height * 0.52,
   },
-  bottomSheetCollapsed: {
-    paddingTop: 10,
-    paddingBottom: 14,
-  },
-  bottomSheetExpanded: {
-    paddingTop: 25,
-    paddingBottom: 25,
-  },
   dragHandle: {
     width: 60,
     height: 5,
@@ -580,28 +518,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginBottom: 20,
   },
-  sheetPeek: {
-    width: '100%',
-  },
-  peekRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  peekTextWrap: {
-    flex: 1,
-    marginRight: 12,
-  },
-  peekHint: {
-    marginTop: 4,
-    fontSize: 12,
-    color: '#7A7A7A',
-  },
-  peekRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
+
   headerInfo: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -690,6 +607,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.default.primary,
   },
+  
   addressDivider: {
     height: 1,
     backgroundColor: '#E0E0E0',

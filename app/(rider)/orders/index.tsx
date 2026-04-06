@@ -29,6 +29,13 @@ const FILTER_LABELS: Record<OrderFilter, string> = {
   CANCEL: 'CANCEL',
 };
 
+const STATUS_BADGE_STYLES = {
+  ACCEPTED: 'statusBadgeAccepted',
+  PICKEDUP: 'statusBadgePickedup',
+  COMPLETED: 'statusBadgeCompleted',
+  CANCEL: 'statusBadgeCancel',
+} as const;
+
 export default function RiderOrdersScreen() {
   const router = useRouter();
   const { id, token } = useSelector((state: any) => state.auth);
@@ -59,6 +66,7 @@ export default function RiderOrdersScreen() {
         pickupPersonId: resolvedPickupPersonId,
       });
       setOrders(nextOrders);
+      console.log('Loaded pickup orders:', nextOrders[0]);
     } catch (error) {
       console.error('Failed to load pickup orders:', error);
       setOrders([]);
@@ -145,6 +153,12 @@ export default function RiderOrdersScreen() {
           </View>
         ) : (
           filteredOrders.map((order) => (
+            (() => {
+              const orderStatus = categorizePickupOrderStatus(order.status);
+              const statusBadgeStyle =
+                styles[STATUS_BADGE_STYLES[orderStatus as keyof typeof STATUS_BADGE_STYLES] || 'statusBadgeAccepted'];
+
+              return (
             <TouchableOpacity
               key={String(order.id)}
               style={styles.card}
@@ -159,12 +173,22 @@ export default function RiderOrdersScreen() {
               }
             >
               <View style={styles.cardTop}>
-                <Text style={styles.cardTitle}>
-                  {order.restaurantName || 'Restaurant'}
-                </Text>
-                <View style={styles.statusBadge}>
+                <View style={styles.titleWrap}>
+                  <Text style={styles.cardTitle}>
+                    {order.restaurantName || 'Restaurant'}
+                  </Text>
+                  <Text style={styles.cardDate}>
+                    {new Date(order.createdAt).toLocaleDateString()}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.statusBadge,
+                    statusBadgeStyle,
+                  ]}
+                >
                   <Text style={styles.statusText}>
-                    {categorizePickupOrderStatus(order.status)}
+                    {orderStatus}
                   </Text>
                 </View>
               </View>
@@ -193,13 +217,26 @@ export default function RiderOrdersScreen() {
                 </Text>
               </View>
 
+              <View style={styles.infoRow}>
+                <MaterialIcons
+                  name="inventory-2"
+                  size={18}
+                  color={Colors.default.primary}
+                />
+                <Text style={styles.infoText}>
+                  {order.items?.length || 0} item(s)
+                </Text>
+              </View>
+
               <View style={styles.cardBottom}>
                 <Text style={styles.amountText}>
-                  Rs. {Number(order.deliveryFee || 0).toFixed(2)}
+                  Rs. {Number(order.total || 0).toFixed(2)}
                 </Text>
                 <Text style={styles.detailsLink}>View details</Text>
               </View>
             </TouchableOpacity>
+              );
+            })()
           ))
         )}
       </ScrollView>
@@ -283,18 +320,36 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
   },
-  cardTitle: {
+  titleWrap: {
     flex: 1,
+    marginRight: 12,
+  },
+  cardTitle: {
     fontSize: 16,
     fontWeight: '700',
     color: '#232323',
-    marginRight: 12,
+  },
+  cardDate: {
+    marginTop: 4,
+    fontSize: 12,
+    color: '#8A8A8A',
   },
   statusBadge: {
-    backgroundColor: '#FFF1EA',
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 6,
+  },
+  statusBadgeAccepted: {
+    backgroundColor: '#FFF1EA',
+  },
+  statusBadgePickedup: {
+    backgroundColor: '#EEF5FF',
+  },
+  statusBadgeCompleted: {
+    backgroundColor: '#EBF8EF',
+  },
+  statusBadgeCancel: {
+    backgroundColor: '#FFEDED',
   },
   statusText: {
     fontSize: 11,

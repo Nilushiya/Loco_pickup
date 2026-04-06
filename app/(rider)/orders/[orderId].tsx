@@ -70,6 +70,11 @@ export default function RiderOrderDetailsScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.content}>
+          <View style={styles.totalCard}>
+            <Text style={styles.totalLabel}>Status</Text>
+            <Text style={styles.totalValue}>{details.status || 'Not available'}</Text>
+          </View>
+
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Restaurant</Text>
             <Text style={styles.valueTitle}>{details.restaurantName}</Text>
@@ -126,7 +131,7 @@ export default function RiderOrderDetailsScreen() {
           <View style={styles.totalCard}>
             <Text style={styles.totalLabel}>Total Amount</Text>
             <Text style={styles.totalValue}>
-              Rs. {Number(details.totalAmount || 0).toFixed(2)}
+              Rs. {Number(details.totalAmount || details.deliveryFee || 0).toFixed(2)}
             </Text>
           </View>
         </ScrollView>
