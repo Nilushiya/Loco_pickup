@@ -1,88 +1,174 @@
-import { Feather, FontAwesome, MaterialIcons } from '@expo/vector-icons';
+import { Feather, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
-import React from 'react';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch, useSelector } from 'react-redux';
+import apiClient from '../../api/client';
+import {
+  fetchPickupPersonDetails,
+  getStoredPickupPersonId,
+} from '../../api/pickupPersonService';
+import { ENDPOINTS } from '../../constants/Config';
 import { Colors } from '../../constants/theme';
 import { logout } from '../../redux/slices/authSlice';
-import apiClient from '../../api/client';
-import { ENDPOINTS } from '../../constants/Config';
 
 export default function RiderProfileScreen() {
   const dispatch = useDispatch();
   const router = useRouter();
-  const { id } = useSelector((state: any) => state.auth);
+  const { id, token } = useSelector((state: any) => state.auth);
+  const [pickupPerson, setPickupPerson] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const loadPickupPerson = async () => {
+      try {
+        setIsLoading(true);
+        const resolvedId = await getStoredPickupPersonId(id, token);
+
+        if (!resolvedId) {
+          return;
+        }
+
+        const details = await fetchPickupPersonDetails(resolvedId);
+        setPickupPerson(details);
+      } catch (error) {
+        console.error('Failed to load pickup person profile:', error);
+        Alert.alert('Error', 'Could not load your profile details.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadPickupPerson();
+  }, [id, token]);
 
   const handleLogout = async () => {
-    // Attempt to turn off availability before completely logging out
     try {
-      if (id) {
+      const resolvedId = pickupPerson?.id ?? id;
+
+      if (resolvedId) {
         await apiClient.put(ENDPOINTS.UPDATE_AVAILABILITY, {
           availability: false,
-          id: Number(id),
+          id: Number(resolvedId),
         });
-        console.log("Turned off availability during logout.");
       }
     } catch (error) {
-      // Backend returns 400 if it's already false, which is fine, no need to update.
-      console.log("Availability was already off or update failed.");
+      console.log('Availability was already off or update failed.');
     }
 
     await SecureStore.deleteItemAsync('userToken');
+    await SecureStore.deleteItemAsync('userId');
     await SecureStore.deleteItemAsync('userRole');
     dispatch(logout());
     router.replace('/(auth)/login');
   };
 
+  const joinedDate = pickupPerson?.createdAt
+    ? new Date(pickupPerson.createdAt).toLocaleDateString()
+    : 'Not available';
+
+  const fullName = pickupPerson
+    ? `${pickupPerson.firstname || ''} ${pickupPerson.lastname || ''}`.trim()
+    : 'Pickup Person';
+
   const menuItems = [
-    { title: 'Earnings', icon: 'dollar', library: FontAwesome, value: '$450.00' },
-    { title: 'Order History', icon: 'history', library: MaterialIcons, value: '15 deliveries' },
-    { title: 'Settings', icon: 'settings', library: Feather, value: '' },
-    { title: 'Help & Support', icon: 'help-circle', library: Feather, value: '' },
+    {
+      title: 'Email',
+      icon: 'email',
+      library: MaterialIcons,
+      value: pickupPerson?.email || 'Not available',
+    },
+    {
+      title: 'Phone Number',
+      icon: 'phone',
+      library: Feather,
+      value: pickupPerson?.phoneNumber || 'Not available',
+    },
+    {
+      title: 'Status',
+      icon: 'check-circle',
+      library: Feather,
+      value: pickupPerson?.status || 'Not available',
+    },
+    {
+      title: 'Availability',
+      icon: 'radio-button-on',
+      library: Ionicons,
+      value: pickupPerson?.availability ? 'ONLINE' : 'OFFLINE',
+    },
+    {
+      title: 'Verification',
+      icon: 'shield-checkmark-outline',
+      library: Ionicons,
+      value: pickupPerson?.isVerified ? 'Verified' : 'Not Verified',
+    },
+    {
+      title: 'Joined',
+      icon: 'calendar',
+      library: Feather,
+      value: joinedDate,
+    },
   ];
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-
-        {/* Profile Header */}
         <View style={styles.header}>
           <Image
             source={{ uri: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' }}
             style={styles.avatar}
           />
           <View style={styles.info}>
-            <Text style={styles.name}>John Doe (Rider)</Text>
-            <Text style={styles.rating}>
-              <FontAwesome name="star" size={16} color="#FFD700" /> 4.9 (120 Ratings)
-            </Text>
-            <Text style={styles.vehicle}>Vehicle: Honda CG 125</Text>
+            <Text style={styles.name}>{fullName}</Text>
+            <Text style={styles.roleText}>Pickup Partner</Text>
+            {isLoading ? (
+              <ActivityIndicator size="small" color={Colors.default.primary} />
+            ) : (
+              <Text style={styles.metaText}>
+                ID: {pickupPerson?.id ?? 'Not available'}
+              </Text>
+            )}
           </View>
         </View>
 
-        {/* Menu Items */}
         <View style={styles.menuContainer}>
           {menuItems.map((item, index) => (
-            <TouchableOpacity key={index} style={styles.menuItem}>
+            <View
+              key={`${item.title}-${index}`}
+              style={[
+                styles.menuItem,
+                index === menuItems.length - 1 && styles.menuItemLast,
+              ]}
+            >
               <View style={styles.menuLeft}>
-                <item.library name={item.icon as any} size={24} color={Colors.default.primary} />
+                <item.library
+                  name={item.icon as any}
+                  size={24}
+                  color={Colors.default.primary}
+                />
                 <Text style={styles.menuText}>{item.title}</Text>
               </View>
               <View style={styles.menuRight}>
-                {item.value ? <Text style={styles.menuValue}>{item.value}</Text> : null}
-                <MaterialIcons name="chevron-right" size={24} color="#BDBDBD" />
+                <Text style={styles.menuValue}>{item.value}</Text>
               </View>
-            </TouchableOpacity>
+            </View>
           ))}
         </View>
 
-        {/* Logout Button */}
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
           <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>
-
       </ScrollView>
     </SafeAreaView>
   );
@@ -99,7 +185,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'white',
+    backgroundColor: '#fff',
     padding: 20,
     borderRadius: 15,
     shadowColor: '#000',
@@ -124,17 +210,17 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 5,
   },
-  rating: {
+  roleText: {
     fontSize: 14,
     color: '#555',
     marginBottom: 5,
   },
-  vehicle: {
+  metaText: {
     fontSize: 14,
     color: '#757575',
   },
   menuContainer: {
-    backgroundColor: 'white',
+    backgroundColor: '#fff',
     borderRadius: 15,
     paddingVertical: 10,
     shadowColor: '#000',
@@ -153,9 +239,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
   },
+  menuItemLast: {
+    borderBottomWidth: 0,
+  },
   menuLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+    marginRight: 16,
   },
   menuText: {
     fontSize: 16,
@@ -163,13 +254,13 @@ const styles = StyleSheet.create({
     marginLeft: 15,
   },
   menuRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    maxWidth: '55%',
+    alignItems: 'flex-end',
   },
   menuValue: {
     fontSize: 14,
     color: '#757575',
-    marginRight: 10,
+    textAlign: 'right',
   },
   logoutBtn: {
     backgroundColor: '#FFEBEE',

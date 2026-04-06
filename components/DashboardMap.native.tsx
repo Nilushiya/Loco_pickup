@@ -1,16 +1,23 @@
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, View, Text, Alert } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { StyleSheet, View, Text } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '../constants/theme';
 
-export default function DashboardMap() {
+const offlineMapStyle = [
+  { elementType: 'geometry', stylers: [{ saturation: -100 }, { lightness: 10 }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#5f5f5f' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#ffffff' }] },
+];
+
+export default function DashboardMap({ isOnline = true }) {
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const watcherRef = useRef<Location.LocationSubscription | null>(null);
 
   useEffect(() => {
-    (async () => {
+    const startLocation = async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         setErrorMsg('Permission to access location was denied');
@@ -20,17 +27,27 @@ export default function DashboardMap() {
       let currentLocation = await Location.getCurrentPositionAsync({});
       setLocation(currentLocation);
 
-      // Start watching position
-      Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.Balanced,
-          timeInterval: 5000,
-          distanceInterval: 10,
-        },
-        (loc) => setLocation(loc)
-      );
-    })();
-  }, []);
+      if (isOnline) {
+        watcherRef.current = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.Balanced,
+            timeInterval: 5000,
+            distanceInterval: 10,
+          },
+          (loc) => setLocation(loc)
+        );
+      }
+    };
+
+    startLocation();
+
+    return () => {
+      if (watcherRef.current) {
+        watcherRef.current.remove();
+        watcherRef.current = null;
+      }
+    };
+  }, [isOnline]);
 
   if (errorMsg) {
     return (
@@ -52,8 +69,13 @@ export default function DashboardMap() {
     <View style={styles.container}>
       <MapView
         style={styles.map}
-        showsUserLocation={true}
-        showsMyLocationButton={true}
+        showsUserLocation={isOnline}
+        showsMyLocationButton={isOnline}
+        scrollEnabled={isOnline}
+        zoomEnabled={isOnline}
+        rotateEnabled={isOnline}
+        pitchEnabled={isOnline}
+        customMapStyle={isOnline ? [] : offlineMapStyle}
         initialRegion={{
           latitude: location.coords.latitude,
           longitude: location.coords.longitude,
@@ -68,7 +90,11 @@ export default function DashboardMap() {
           }}
           title="My Location"
         >
-          <MaterialCommunityIcons name="motorbike" size={32} color={Colors.default.primary} />
+          <MaterialCommunityIcons
+            name="motorbike"
+            size={32}
+            color={isOnline ? Colors.default.primary : '#555'}
+          />
         </Marker>
       </MapView>
     </View>

@@ -1,6 +1,13 @@
 import { Entypo, MaterialCommunityIcons } from '@expo/vector-icons';
 import React from 'react';
-import { Dimensions, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  Dimensions,
+  Modal,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { Colors } from '../constants/theme';
 
 const { width } = Dimensions.get('window');
@@ -12,26 +19,32 @@ interface OrderModalProps {
   onReject: () => void;
 }
 
-const OrderModal: React.FC<OrderModalProps> = ({ visible, order, onAccept, onReject }) => {
+const OrderModal: React.FC<OrderModalProps> = ({
+  visible,
+  order,
+  onAccept,
+  onReject,
+}) => {
   if (!order) return null;
 
   return (
-    <Modal
-      transparent={true}
-      visible={visible}
-      animationType="slide"
-    >
+    <Modal transparent visible={visible} animationType="slide">
       <View style={styles.overlay}>
         <View style={styles.modalContainer}>
-          <Text style={styles.newOrderTitle}>New Delivery Request!</Text>
+          <View style={styles.handle} />
+          <Text style={styles.newOrderTitle}>New Pickup Request!</Text>
 
           <View style={styles.amountContainer}>
-            <Text style={styles.amountText}>${order.amount}</Text>
+            <Text style={styles.amountText}>Rs. {Number(order.deliveryFee || 0).toFixed(2)}</Text>
           </View>
 
           <View style={styles.detailsContainer}>
             <View style={styles.row}>
-              <Entypo name="location-pin" size={24} color={Colors.default.primary} />
+              <Entypo
+                name="location-pin"
+                size={24}
+                color={Colors.default.primary}
+              />
               <View style={styles.textWrap}>
                 <Text style={styles.label}>Pickup</Text>
                 <Text style={styles.value}>{order.pickupLocation}</Text>
@@ -41,27 +54,45 @@ const OrderModal: React.FC<OrderModalProps> = ({ visible, order, onAccept, onRej
             <View style={styles.dashedLine} />
 
             <View style={styles.row}>
-              <MaterialCommunityIcons name="map-marker-check" size={24} color="#4CAF50" />
+              <MaterialCommunityIcons
+                name="map-marker-check"
+                size={24}
+                color="#4CAF50"
+              />
               <View style={styles.textWrap}>
                 <Text style={styles.label}>Drop-off</Text>
-                <Text style={styles.value}>{order.dropoffLocation}</Text>
+                <Text style={styles.value}>{order.dropLocation}</Text>
               </View>
             </View>
 
+            <View style={styles.dashedLine} />
+
             <View style={styles.row}>
-              <MaterialCommunityIcons name="map-marker-distance" size={24} color="#757575" />
+              <MaterialCommunityIcons
+                name="phone-outline"
+                size={22}
+                color="#757575"
+              />
               <View style={styles.textWrap}>
-                <Text style={styles.label}>Distance</Text>
-                <Text style={styles.value}>{order.distance} miles</Text>
+                <Text style={styles.label}>User Phone</Text>
+                <Text style={styles.value}>
+                  {order.userPhoneNumber || 'Not available'}
+                </Text>
               </View>
             </View>
           </View>
 
           <View style={styles.buttonContainer}>
-            <TouchableOpacity style={[styles.button, styles.rejectBtn]} onPress={onReject}>
+            <TouchableOpacity
+              style={[styles.button, styles.rejectBtn]}
+              onPress={onReject}
+            >
               <Text style={styles.rejectText}>Reject</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.button, styles.acceptBtn]} onPress={onAccept}>
+            <TouchableOpacity
+              style={[styles.button, styles.acceptBtn]}
+              onPress={onAccept}
+            >
               <Text style={styles.acceptText}>Accept</Text>
             </TouchableOpacity>
           </View>
@@ -76,27 +107,37 @@ export default OrderModal;
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'flex-end',
   },
   modalContainer: {
-    width: width * 0.9,
+    width: width,
     backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 20,
-    alignItems: 'center',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 26,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 12,
+  },
+  handle: {
+    width: 56,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: '#DADADA',
+    alignSelf: 'center',
+    marginBottom: 14,
   },
   newOrderTitle: {
     fontSize: 22,
     fontWeight: 'bold',
     color: Colors.default.primary,
     marginBottom: 10,
+    textAlign: 'center',
   },
   amountContainer: {
     backgroundColor: '#FFF0E6',
@@ -104,6 +145,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 30,
     marginBottom: 20,
+    alignSelf: 'center',
   },
   amountText: {
     fontSize: 24,

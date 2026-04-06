@@ -33,6 +33,7 @@ export default function RiderMapScreen() {
   const [riderLocation, setRiderLocation] = useState<{ latitude: number, longitude: number } | null>(null);
   const [locationError, setLocationError] = useState('');
   const mapRef = React.useRef<MapView>(null);
+  const orderFee = Number(order?.deliveryFee ?? order?.amount ?? 0);
 
   // Locations for the order (From API/Redux dynamically)
   const pickupCoords = order?.pickupCoords || { latitude: 6.9744, longitude: 79.9161 };
@@ -226,7 +227,7 @@ export default function RiderMapScreen() {
 
         <View style={styles.headerInfo}>
           <Text style={styles.statusText}>{currentStepLabel()}</Text>
-          <Text style={styles.earningsText}>${order.amount.toFixed(2)}</Text>
+          <Text style={styles.earningsText}>Rs. {orderFee.toFixed(2)}</Text>
         </View>
 
         <View style={styles.addressList}>
@@ -237,7 +238,7 @@ export default function RiderMapScreen() {
           <View style={styles.addressDivider} />
           <View style={orderState === 'delivering' ? styles.activeLoc : styles.inactiveLoc}>
             <Text style={styles.locLabel}>Drop-off Point</Text>
-            <Text style={styles.locVal}>{order.dropoffLocation}</Text>
+            <Text style={styles.locVal}>{order.dropLocation || order.dropoffLocation}</Text>
           </View>
         </View>
 

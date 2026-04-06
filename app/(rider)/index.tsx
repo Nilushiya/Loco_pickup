@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
+  AppState,
   StyleSheet,
   Switch,
   Text,
@@ -12,88 +14,268 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSelector } from 'react-redux';
+import {
+  buildPickupClaimPayload,
+  claimPickupOrder,
+  fetchOrdersByStatus,
+} from '../../api/orderService';
 import apiClient from '../../api/client';
+import {
+  fetchPickupPersonDetails,
+  getStoredPickupPersonId,
+} from '../../api/pickupPersonService';
 import DashboardMap from '../../components/DashboardMap.native';
 import OrderModal from '../../components/OrderModal';
 import { ENDPOINTS } from '../../constants/Config';
 import { Colors } from '../../constants/theme';
 
-const mockOrder = {
-  id: 'order_1',
-  amount: 250.0,
-  pickupLocation: 'Restaurant near University of Kelaniya',
-  dropoffLocation: 'Kelaniya Railway Station',
-  pickupCoords: { latitude: 6.9744, longitude: 79.9161 },
-  dropoffCoords: { latitude: 6.9535, longitude: 79.9130 },
-  distance: 3.2,
-};
+const POLL_INTERVAL_MS = 4000;
 
 export default function RiderDashboard() {
   const router = useRouter();
-  const { id: userId } = useSelector((state: any) => state.auth);
+  const { id: userId, token } = useSelector((state: any) => state.auth);
   const [isOnline, setIsOnline] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false);
+  const [pickupPerson, setPickupPerson] = useState<any>(null);
+  const [isProfileLoading, setIsProfileLoading] = useState(true);
+  const [requests, setRequests] = useState<any[]>([]);
+  const [isPolling, setIsPolling] = useState(false);
+  const [activeRequestId, setActiveRequestId] = useState<number | null>(null);
+  const [todayEarnings] = useState(0);
 
-  // ✅ better timer handling
-  const orderTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const inFlightRef = useRef(false);
+  const appStateRef = useRef(AppState.currentState);
+  const hiddenRequestIdsRef = useRef<Set<number>>(new Set());
+
+  const currentRequest = requests[0] ?? null;
+  const modalVisible = isOnline && Boolean(currentRequest);
 
   useEffect(() => {
-    if (isOnline) {
-      orderTimer.current = setTimeout(() => {
-        setModalVisible(true);
-      }, 5000);
-    } else {
-      setModalVisible(false);
-    }
+    const loadPickupPerson = async () => {
+      try {
+        setIsProfileLoading(true);
+        const resolvedId = await getStoredPickupPersonId(userId, token);
 
-    return () => {
-      if (orderTimer.current) {
-        clearTimeout(orderTimer.current);
-        orderTimer.current = null;
+        if (!resolvedId) {
+          return;
+        }
+
+        const details = await fetchPickupPersonDetails(resolvedId);
+
+        if (details) {
+          setPickupPerson(details);
+          setIsOnline(Boolean(details.availability));
+        }
+      } catch (error) {
+        console.error('Failed to load pickup person details:', error);
+      } finally {
+        setIsProfileLoading(false);
       }
     };
-  }, [isOnline]);
+
+    loadPickupPerson();
+  }, [token, userId]);
+
+  const mergeRequests = useCallback((incomingRequests: any[]) => {
+    const visibleIncoming = incomingRequests.filter(
+      (request) =>
+        request?.status === 'ACCEPTED' &&
+        !hiddenRequestIdsRef.current.has(request.id)
+    );
+
+    setRequests((current) => {
+      const incomingMap = new Map(
+        visibleIncoming.map((request) => [request.id, request])
+      );
+      const currentMap = new Map(current.map((request) => [request.id, request]));
+      const nextExisting = current.filter((request) => incomingMap.has(request.id));
+      const freshRequests = visibleIncoming.filter(
+        (request) => !currentMap.has(request.id)
+      );
+
+      if (freshRequests.length === 0 && nextExisting.length === current.length) {
+        return current;
+      }
+
+      return [...freshRequests, ...nextExisting];
+    });
+  }, []);
+
+  const runPollingCycle = useCallback(async () => {
+    if (!isOnline || inFlightRef.current) {
+      return;
+    }
+
+    inFlightRef.current = true;
+    setIsPolling(true);
+
+    try {
+      const acceptedOrders = await fetchOrdersByStatus('ACCEPTED');
+      mergeRequests(acceptedOrders);
+    } catch (error) {
+      console.error('Failed to fetch accepted orders:', error);
+    } finally {
+      inFlightRef.current = false;
+      setIsPolling(false);
+    }
+  }, [isOnline, mergeRequests]);
+
+  const stopPolling = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    inFlightRef.current = false;
+    setIsPolling(false);
+  }, []);
+
+  const startPolling = useCallback(() => {
+    if (!isOnline || intervalRef.current) {
+      return;
+    }
+
+    runPollingCycle();
+    intervalRef.current = setInterval(() => {
+      runPollingCycle();
+    }, POLL_INTERVAL_MS);
+  }, [isOnline, runPollingCycle]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (AppState.currentState === 'active') {
+        startPolling();
+      }
+
+      return () => {
+        stopPolling();
+      };
+    }, [startPolling, stopPolling])
+  );
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      const wasActive = appStateRef.current === 'active';
+      appStateRef.current = nextState;
+
+      if (nextState === 'active') {
+        startPolling();
+      } else if (wasActive) {
+        stopPolling();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [startPolling, stopPolling]);
+
+  useEffect(() => {
+    if (!isOnline) {
+      stopPolling();
+      setRequests([]);
+    }
+  }, [isOnline, stopPolling]);
 
   const toggleOnline = async () => {
     const newStatus = !isOnline;
-    setIsOnline(newStatus); // Optimistic UI update
+    setIsOnline(newStatus);
 
     try {
-      console.log("Updating availability to", newStatus);
-      console.log("User id", userId);
-      const response = await apiClient.put(ENDPOINTS.UPDATE_AVAILABILITY, {
+      const resolvedId = await getStoredPickupPersonId(
+        pickupPerson?.id ?? userId,
+        token
+      );
+
+      if (!resolvedId) {
+        throw new Error('Pickup person id is not available.');
+      }
+
+      await apiClient.put(ENDPOINTS.UPDATE_AVAILABILITY, {
         availability: newStatus,
-        id: userId, // Added from Redux as requested
+        id: resolvedId,
       });
-      console.log(`Availability updated to ${newStatus}`, response.data);
+
+      setPickupPerson((current: any) =>
+        current ? { ...current, availability: newStatus } : current
+      );
+
+      if (newStatus) {
+        startPolling();
+      } else {
+        stopPolling();
+      }
     } catch (error) {
       console.error('Failed to update availability:', error);
       Alert.alert('Error', 'Could not update your availability. Please try again.');
-      setIsOnline(!newStatus); // Revert UI
+      setIsOnline(!newStatus);
     }
   };
 
-  const handleAcceptOrder = async () => {
+  const removeRequestFromState = useCallback((requestId: number) => {
+    setRequests((current) => current.filter((request) => request.id !== requestId));
+  }, []);
+
+  const handleAcceptOrder = useCallback(async () => {
+    if (!currentRequest) {
+      return;
+    }
+
     try {
-      setModalVisible(false);
-      await AsyncStorage.setItem('currentOrder', JSON.stringify(mockOrder));
-      router.navigate('/(rider)/map' as any);
-      console.log('Order accepted');
-    } catch (error) {
-      console.error('Error saving order:', error);
-    }
-  };
+      setActiveRequestId(currentRequest.id);
+      hiddenRequestIdsRef.current.add(currentRequest.id);
 
-  const handleRejectOrder = () => {
-    setModalVisible(false);
-  };
+      await claimPickupOrder(
+        buildPickupClaimPayload(currentRequest, pickupPerson?.id )
+      );
+
+      removeRequestFromState(currentRequest.id);
+      await AsyncStorage.setItem('currentOrder', JSON.stringify(currentRequest));
+      router.navigate('/(rider)/map' as any);
+    } catch (error: any) {
+      hiddenRequestIdsRef.current.delete(currentRequest.id);
+      console.error('Failed to accept pickup request:', error);
+      Alert.alert(
+        'Accept Failed',
+        error?.response?.data?.message ||
+          'Could not accept this request. It may already be taken.'
+      );
+      await runPollingCycle();
+    } finally {
+      setActiveRequestId(null);
+    }
+  }, [currentRequest, pickupPerson?.id, removeRequestFromState, router, runPollingCycle, userId]);
+
+  const handleRejectOrder = useCallback(async () => {
+    if (!currentRequest) {
+      return;
+    }
+
+    try {
+      setActiveRequestId(currentRequest.id);
+      hiddenRequestIdsRef.current.add(currentRequest.id);
+      removeRequestFromState(currentRequest.id);
+    } catch (error: any) {
+      hiddenRequestIdsRef.current.delete(currentRequest.id);
+      console.error('Failed to dismiss pickup request:', error);
+      Alert.alert(
+        'Dismiss Failed',
+        'Could not dismiss this request. Please try again.'
+      );
+    } finally {
+      setActiveRequestId(null);
+    }
+  }, [currentRequest, removeRequestFromState]);
+
+  const pendingCount = requests.length;
+  const requestCountLabel = pendingCount < 10 ? `0${pendingCount}` : `${pendingCount}`;
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* HEADER */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.welcomeText}>Hello, Rider!</Text>
+          <Text style={styles.welcomeText}>
+            Hello, {pickupPerson?.firstname || 'Rider'}!
+          </Text>
 
           <Text
             style={[
@@ -103,6 +285,13 @@ export default function RiderDashboard() {
           >
             {isOnline ? 'You are Online' : 'You are Offline'}
           </Text>
+          {isProfileLoading ? (
+            <ActivityIndicator
+              size="small"
+              color={Colors.default.primary}
+              style={styles.headerLoader}
+            />
+          ) : null}
         </View>
 
         <View style={styles.toggleContainer}>
@@ -120,29 +309,22 @@ export default function RiderDashboard() {
         </View>
       </View>
 
-      {/* STATS */}
       <View style={styles.statsContainer}>
         <View style={styles.statBox}>
-          <Ionicons name="card" size={32} color={Colors.default.primary} />
-          <Text style={styles.statValue}>$124.50</Text>
-          <Text style={styles.statLabel}>Today's Earnings</Text>
+          <Ionicons name="notifications" size={32} color={Colors.default.primary} />
+          <Text style={styles.statValue}>{requestCountLabel}</Text>
+          <Text style={styles.statLabel}>Open Requests</Text>
         </View>
 
-        <View style={styles.statBox}>
-          {/* <AntDesign
-            name="checkcircleo"
-            size={32}
-            color={Colors.default.primary}
-          /> */}
-          <Text style={styles.statValue}>8</Text>
-          <Text style={styles.statLabel}>Deliveries</Text>
+        <View style={styles.earningsBubble}>
+          <Ionicons name="wallet-outline" size={26} color={Colors.default.primary} />
+          <Text style={styles.earningsValue}>Rs. {todayEarnings.toFixed(0)}</Text>
+          <Text style={styles.earningsLabel}>Today</Text>
         </View>
       </View>
 
-      {/* MAP PLACEHOLDER */}
-      <DashboardMap />
+      <DashboardMap isOnline={isOnline} />
 
-      {/* OFFLINE BOX */}
       {!isOnline && (
         <View style={styles.offlineBox}>
           <Ionicons name="moon-outline" size={48} color="#757575" />
@@ -155,20 +337,9 @@ export default function RiderDashboard() {
         </View>
       )}
 
-      {/* TEST BUTTON */}
-      <TouchableOpacity
-        style={styles.testBtn}
-        onPress={() => setModalVisible(true)}
-      >
-        <Text style={{ color: 'white', fontWeight: 'bold' }}>
-          Test Receive Order
-        </Text>
-      </TouchableOpacity>
-
-      {/* ORDER MODAL */}
       <OrderModal
-        visible={modalVisible}
-        order={mockOrder}
+        visible={modalVisible && activeRequestId === null}
+        order={currentRequest}
         onAccept={handleAcceptOrder}
         onReject={handleRejectOrder}
       />
@@ -199,6 +370,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 5,
   },
+  headerLoader: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
   toggleContainer: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -213,6 +388,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: 20,
     justifyContent: 'space-between',
+    alignItems: 'center',
   },
   statBox: {
     width: '48%',
@@ -232,36 +408,27 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#757575',
   },
-  mapPlaceholder: {
-    flex: 1,
-    margin: 20,
-    backgroundColor: '#E0F7FA',
-    borderRadius: 15,
-    justifyContent: 'center',
+  earningsBubble: {
+    width: 108,
+    height: 108,
+    borderRadius: 54,
+    backgroundColor: '#fff',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#B2EBF2',
-    borderStyle: 'dashed',
+    justifyContent: 'center',
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#F4E6E0',
   },
-  mapText: {
-    fontSize: 18,
-    color: '#006064',
-    marginTop: 10,
-    fontWeight: '600',
+  earningsValue: {
+    marginTop: 6,
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
   },
-  mapSubText: {
-    fontSize: 14,
-    color: '#00838F',
-    marginTop: 5,
-  },
-  testBtn: {
-    position: 'absolute',
-    bottom: 20,
-    alignSelf: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
+  earningsLabel: {
+    fontSize: 12,
+    color: '#757575',
+    marginTop: 2,
   },
   offlineBox: {
     position: 'absolute',
