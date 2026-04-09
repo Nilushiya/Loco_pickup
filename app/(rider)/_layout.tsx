@@ -33,10 +33,23 @@ export default function RiderLayout() {
         }}
       />
       <Tabs.Screen
+        name="orders"
+        options={{
+          title: 'History',
+          tabBarIcon: ({ color }) => <MaterialIcons name="history-toggle-off" size={24} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
           tabBarIcon: ({ color }) => <FontAwesome name="user" size={24} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="orders/[orderId]"
+        options={{
+          href: null,
         }}
       />
     </Tabs>

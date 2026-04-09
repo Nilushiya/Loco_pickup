@@ -4,6 +4,7 @@ import * as SecureStore from 'expo-secure-store';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, useColorScheme, View } from 'react-native';
 import { Provider, useDispatch, useSelector } from 'react-redux';
+import { getPickupPersonIdFromToken } from '../api/pickupPersonService';
 import { authSuccess } from '../redux/slices/authSlice';
 import { store } from '../redux/store';
 
@@ -24,11 +25,19 @@ function RootLayoutNav() {
         const savedRole = await SecureStore.getItemAsync('userRole');
 
         if (savedToken && savedRole) {
+          const resolvedId = savedId
+            ? Number(savedId)
+            : getPickupPersonIdFromToken(savedToken);
+
+          if (!savedId && resolvedId !== null) {
+            await SecureStore.setItemAsync('userId', String(resolvedId));
+          }
+
           // If found, hydrate Redux state
           dispatch(
             authSuccess({
               token: savedToken,
-              id: savedId ? Number(savedId) : null,
+              id: resolvedId,
               role: savedRole,
             })
           );

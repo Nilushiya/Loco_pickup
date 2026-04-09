@@ -5,9 +5,8 @@ import { Platform } from 'react-native';
  */
 
 // Load from .env
-const EXPO_PUBLIC_API_URL = process.env.EXPO_PUBLIC_API_URL;
 const WEB_API_URL = "http://localhost:3001";
-const MOBILE_API_URL = EXPO_PUBLIC_API_URL || "http://172.19.8.0:3001"; // for mobile devices
+const MOBILE_API_URL = "http://192.168.8.197:3001"; // for mobile devices
 const PROD_API_URL = process.env.EXPO_PUBLIC_PROD_API_URL;     // for production server
 
 // Determine current environment
@@ -35,6 +34,7 @@ if (!ENV.apiUrl) {
 
 // Centralized Export
 export const BASE_URL = ENV.apiUrl;
+export const DEFAULT_RESTAURANT_ID = process.env.EXPO_PUBLIC_RESTAURANT_ID || '';
 
 export const ENDPOINTS = {
   // Auth
@@ -43,7 +43,15 @@ export const ENDPOINTS = {
   LOGOUT: '/auth/logout',
   RESTAURANT_REGISTER: '/pickup-person/register',
   RESTAURANT_LOGIN: '/pickup-person/login',
+  PICKUP_PERSON_DETAILS: (pickupPersonId) => `/pickup-person/${pickupPersonId}`,
   UPDATE_AVAILABILITY: '/pickup-person/availability',
+  GET_ORDERS_BY_STATUS: (status) => `/order/get-by-status/${status}`,
+  CLAIM_PICKUP_ORDER: '/order/claim-pickup',
+  PICKUP_ORDER: '/order/pickup',
+  GET_PICKUP_ORDER_DETAILS: (orderId) => `/order/pickup/get/${orderId}`,
+  HANDOVER_ORDER: '/order/handover',
+  CANCEL_PICKUP_ORDER: '/order/cancel-pickup',
+  GET_PICKUP_ORDERS: '/order/pickup/get',
 
 
   // User Role

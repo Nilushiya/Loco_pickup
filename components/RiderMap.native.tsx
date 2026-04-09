@@ -3,9 +3,25 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Alert, Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  Alert,
+  Dimensions,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import MapViewDirections from 'react-native-maps-directions';
+import {
+  buildPickupClaimPayload,
+  cancelPickupOrder,
+  fetchPickupOrderDetails,
+  handoverOrder,
+  pickupOrder,
+} from '../api/orderService';
 import { Colors } from '../constants/theme';
 
 // IMPORTANT: Replace this with your actual Google Maps API Key
@@ -28,20 +44,122 @@ export default function RiderMapScreen() {
   const router = useRouter();
   const [orderState, setOrderState] = useState<'heading_to_pickup' | 'arrived' | 'delivering' | 'delivered'>('heading_to_pickup');
   const [order, setOrder] = useState<any>(null);
+  const [pickupOrderDetails, setPickupOrderDetails] = useState<any>(null);
+  const [isSubmittingPickup, setIsSubmittingPickup] = useState(false);
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+  const [pickupCoords, setPickupCoords] = useState<{ latitude: number, longitude: number } | null>(null);
+  const [dropoffCoords, setDropoffCoords] = useState<{ latitude: number, longitude: number } | null>(null);
 
   // Real-world location tracking
   const [riderLocation, setRiderLocation] = useState<{ latitude: number, longitude: number } | null>(null);
   const [locationError, setLocationError] = useState('');
   const mapRef = React.useRef<MapView>(null);
-
-  // Locations for the order (From API/Redux dynamically)
-  const pickupCoords = order?.pickupCoords || { latitude: 6.9744, longitude: 79.9161 };
-  const dropoffCoords = order?.dropoffCoords || { latitude: 6.9535, longitude: 79.9130 };
+  const orderFee = Number(order?.deliveryFee ?? order?.amount ?? 0);
+  const customerName =
+    order?.user?.firstname && order?.user?.lastname
+      ? `${order.user.firstname} ${order.user.lastname}`
+      : order?.user?.name ||
+        order?.customerName ||
+        order?.userName ||
+        'Customer';
+  const deliveryUserName = pickupOrderDetails?.userName || customerName;
+  const deliveryUserPhone =
+    pickupOrderDetails?.userPhoneNumber ||
+    order?.userPhoneNumber ||
+    'Phone not available';
+  const stationDisplayName =
+    pickupOrderDetails?.stationName || order?.stationName || 'Station';
+  const stationDisplayAddress =
+    pickupOrderDetails?.stationAddress ||
+    order?.dropLocation ||
+    order?.dropoffLocation ||
+    '';
+  const trainDisplayName =
+    pickupOrderDetails?.trainName || order?.trainName || 'Train not available';
+  const restaurantDisplayName =
+    pickupOrderDetails?.restaurantName || order?.restaurantName || 'Restaurant';
+  const restaurantDisplayAddress =
+    pickupOrderDetails?.restaurantAddress || order?.pickupLocation || '';
+  const detailItems = pickupOrderDetails?.items || [];
+  const detailTotalAmount = Number(
+    pickupOrderDetails?.totalAmount ?? orderFee
+  ) || 0;
 
   useEffect(() => {
     loadOrder();
     startLocationTracking();
   }, []);
+
+  useEffect(() => {
+    const loadPickupDetails = async () => {
+      if (!order?.id || !order?.pickupPersonId) {
+        return;
+      }
+
+      try {
+        setIsLoadingDetails(true);
+        const details = await fetchPickupOrderDetails({
+          orderId: order.id,
+          pickupPersonId: order.pickupPersonId,
+        });
+        console.log('Fetched pickup order details:', details, order.id, order.pickupPersonId);
+        setPickupOrderDetails(details);
+      } catch (error) {
+        console.log('Failed to load pickup order details:', error);
+      } finally {
+        setIsLoadingDetails(false);
+      }
+    };
+
+    loadPickupDetails();
+  }, [order?.id, order?.pickupPersonId]);
+
+  useEffect(() => {
+    const resolveRoutePoints = async () => {
+      if (!order) {
+        return;
+      }
+
+      try {
+        const nextPickupCoords =
+          order?.pickupCoords ||
+          (order?.pickupLocation
+            ? (await Location.geocodeAsync(order.pickupLocation))[0]
+            : null);
+
+        const nextDropoffCoords =
+          order?.dropoffCoords ||
+          (order?.dropLocation || order?.dropoffLocation
+            ? (
+                await Location.geocodeAsync(
+                  order.dropLocation || order.dropoffLocation
+                )
+              )[0]
+            : null);
+
+        setPickupCoords(
+          nextPickupCoords
+            ? {
+                latitude: nextPickupCoords.latitude,
+                longitude: nextPickupCoords.longitude,
+              }
+            : null
+        );
+        setDropoffCoords(
+          nextDropoffCoords
+            ? {
+                latitude: nextDropoffCoords.latitude,
+                longitude: nextDropoffCoords.longitude,
+              }
+            : null
+        );
+      } catch (error) {
+        console.log('Failed to geocode order route:', error);
+      }
+    };
+
+    resolveRoutePoints();
+  }, [order]);
 
   const startLocationTracking = async () => {
     let { status } = await Location.requestForegroundPermissionsAsync();
@@ -97,26 +215,40 @@ export default function RiderMapScreen() {
 
   const currentStepLabel = () => {
     switch (orderState) {
-      case 'heading_to_pickup': return 'Heading to Pickup';
-      case 'arrived': return 'Ready to start Delivery';
-      case 'delivering': return 'On The Way to Customer';
+      case 'heading_to_pickup': return 'Heading to Restaurant';
+      case 'arrived': return 'At Restaurant';
+      case 'delivering': return 'Heading to Station';
       case 'delivered': return 'Order Complete';
       default: return '';
     }
   };
 
-  const handleAction = () => {
+  const handleAction = async () => {
     if (orderState === 'heading_to_pickup') {
       setOrderState('arrived');
     } else if (orderState === 'arrived') {
-      setOrderState('delivering');
+      try {
+        setIsSubmittingPickup(true);
+        await pickupOrder(
+          buildPickupClaimPayload(order, order?.pickupPersonId)
+        );
+        setOrderState('delivering');
+      } catch (error: any) {
+        Alert.alert(
+          'Pickup Failed',
+          error?.response?.data?.message ||
+            'Could not confirm pickup. Please try again.'
+        );
+      } finally {
+        setIsSubmittingPickup(false);
+      }
     } else if (orderState === 'delivering') {
       setOrderState('delivered');
       Alert.alert("Success", "Order delivered successfully!", [
         {
           text: "OK", onPress: () => {
             AsyncStorage.removeItem('currentOrder');
-            router.navigate('/(rider)/index' as any);
+              router.replace('/(rider)' as any);
           }
         }
       ]);
@@ -132,7 +264,7 @@ export default function RiderMapScreen() {
         {
           text: "Yes", onPress: () => {
             AsyncStorage.removeItem('currentOrder');
-            router.navigate('/(rider)/index' as any);
+            router.replace('/(rider)' as any);
           }
         }
       ]
@@ -144,7 +276,7 @@ export default function RiderMapScreen() {
       <View style={styles.noOrder}>
         <FontAwesome name="map-o" size={64} color="#ccc" />
         <Text style={styles.noOrderText}>No active orders</Text>
-        <TouchableOpacity style={styles.btnReturn} onPress={() => router.navigate('/(rider)/index' as any)}>
+        <TouchableOpacity style={styles.btnReturn} onPress={() => router.replace('/(rider)' as any)}>
           <Text style={{ color: 'white', fontWeight: 'bold' }}>Go back Home</Text>
         </TouchableOpacity>
       </View>
@@ -153,15 +285,17 @@ export default function RiderMapScreen() {
 
   // Determine routing parameters
   const getOrigin = () => {
-    // PickMe tracking: Route always originates from the rider's LIVE location
-    return riderLocation || pickupCoords; 
+    return riderLocation || pickupCoords || dropoffCoords || {
+      latitude: 6.9744,
+      longitude: 79.9161,
+    };
   };
 
   const getDestination = () => {
     if (orderState === 'heading_to_pickup' || orderState === 'arrived') {
-      return pickupCoords;
+      return pickupCoords || getOrigin();
     }
-    return dropoffCoords;
+    return dropoffCoords || getOrigin();
   };
 
   return (
@@ -185,19 +319,20 @@ export default function RiderMapScreen() {
             destination={getDestination()}
             apikey={GOOGLE_MAPS_API_KEY}
             strokeWidth={4}
-            strokeColor={Colors.default.primary}
+            strokeColor="#2F80ED"
             optimizeWaypoints={true}
             onError={(errorMessage) => console.log('MapViewDirections Error: ', errorMessage)}
           />
         )}
 
-        {/* Fallback mock polyline if API key fails or during dev */}
-        <Polyline
-          coordinates={[getOrigin(), getDestination()]}
-          strokeColor="rgba(255, 112, 67, 0.4)" // Faint red fallback
-          strokeWidth={4}
-          lineDashPattern={[5, 10]}
-        />
+        {pickupCoords && dropoffCoords ? (
+          <Polyline
+            coordinates={[getOrigin(), getDestination()]}
+            strokeColor="rgba(47, 128, 237, 0.35)"
+            strokeWidth={4}
+            lineDashPattern={[5, 10]}
+          />
+        ) : null}
 
         {/* Rider Marker (Only show custom marker if we don't rely on showsUserLocation, but we do use expo-location) */}
         {riderLocation && orderState !== 'delivered' && (
@@ -207,17 +342,28 @@ export default function RiderMapScreen() {
         )}
 
         {/* Pickup marker */}
-        <Marker coordinate={pickupCoords} title="Pickup" description={order?.pickupLocation}>
-          <FontAwesome name="building" size={24} color="#4CAF50" />
-        </Marker>
+        {pickupCoords ? (
+          <Marker
+            coordinate={pickupCoords}
+            title={restaurantDisplayName}
+            description={restaurantDisplayAddress}
+          >
+            <FontAwesome name="building" size={24} color="#4CAF50" />
+          </Marker>
+        ) : null}
 
-        {/* Dropoff marker */}
-        <Marker coordinate={dropoffCoords} title="Dropoff" description={order?.dropoffLocation}>
-          <FontAwesome name="home" size={24} color="#F44336" />
-        </Marker>
+        {dropoffCoords ? (
+          <Marker
+            coordinate={dropoffCoords}
+            title={stationDisplayName}
+            description={stationDisplayAddress}
+          >
+            <FontAwesome name="home" size={24} color="#F44336" />
+          </Marker>
+        ) : null}
       </MapView>
 
-      <TouchableOpacity style={styles.backBtn} onPress={() => router.navigate('/(rider)/index' as any)}>
+      <TouchableOpacity style={styles.backBtn} onPress={() => router.replace('/(rider)' as any)}>
         <MaterialCommunityIcons name="arrow-left" size={28} color="#333" />
       </TouchableOpacity>
 
@@ -226,20 +372,91 @@ export default function RiderMapScreen() {
 
         <View style={styles.headerInfo}>
           <Text style={styles.statusText}>{currentStepLabel()}</Text>
-          <Text style={styles.earningsText}>${order.amount.toFixed(2)}</Text>
+          <Text style={styles.earningsText}>Rs. {detailTotalAmount.toFixed(2)}</Text>
         </View>
 
-        <View style={styles.addressList}>
-          <View style={orderState === 'heading_to_pickup' ? styles.activeLoc : styles.inactiveLoc}>
-            <Text style={styles.locLabel}>Pickup Point</Text>
-            <Text style={styles.locVal}>{order.pickupLocation}</Text>
+        <ScrollView
+          style={styles.sheetScroll}
+          contentContainerStyle={styles.sheetScrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.addressList}>
+          {orderState === 'heading_to_pickup' || orderState === 'arrived' ? (
+            <>
+              <View style={styles.activeLoc}>
+                <Text style={styles.locLabel}>Restaurant</Text>
+                <Text style={styles.locVal}>{restaurantDisplayName}</Text>
+                <Text style={styles.locSubVal}>{restaurantDisplayAddress}</Text>
+              </View>
+              {orderState === 'arrived' ? (
+                <>
+                  <View style={styles.addressDivider} />
+                  <View style={styles.activeLoc}>
+                    <Text style={styles.locLabel}>Order Items</Text>
+                    {isLoadingDetails ? (
+                      <Text style={styles.locSubVal}>Loading items...</Text>
+                    ) : detailItems.length > 0 ? (
+                      detailItems.map((item: any) => (
+                        <View key={String(item.id)} style={styles.itemRow}>
+                          {item.image ? (
+                            <Image
+                              source={{ uri: item.image }}
+                              style={styles.itemImage}
+                            />
+                          ) : (
+                            <View style={styles.itemPlaceholder}>
+                              <MaterialCommunityIcons
+                                name="food-outline"
+                                size={18}
+                                color="#7D7D7D"
+                              />
+                            </View>
+                          )}
+                          <View style={styles.itemInfo}>
+                            <Text style={styles.itemName}>{item.name}</Text>
+                            <Text style={styles.itemMeta}>
+                              Qty {item.quantity} x Rs. {Number(item.unitPrice || 0).toFixed(2)}
+                            </Text>
+                          </View>
+                          <Text style={styles.itemTotal}>
+                            Rs. {Number(item.total || 0).toFixed(2)}
+                          </Text>
+                        </View>
+                      ))
+                    ) : (
+                      <Text style={styles.locSubVal}>No item details available.</Text>
+                    )}
+                  </View>
+                  <View style={styles.addressDivider} />
+                  <View style={styles.activeLoc}>
+                    <Text style={styles.locLabel}>Total Amount</Text>
+                    <Text style={styles.locVal}>Rs. {detailTotalAmount.toFixed(2)}</Text>
+                  </View>
+                </>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <View style={styles.activeLoc}>
+                <Text style={styles.locLabel}>Drop Point</Text>
+                <Text style={styles.locVal}>{stationDisplayName}</Text>
+                <Text style={styles.locSubVal}>{stationDisplayAddress}</Text>
+              </View>
+              <View style={styles.addressDivider} />
+              <View style={styles.activeLoc}>
+                <Text style={styles.locLabel}>User</Text>
+                <Text style={styles.locVal}>{deliveryUserName}</Text>
+                <Text style={styles.locSubVal}>{deliveryUserPhone}</Text>
+              </View>
+              <View style={styles.addressDivider} />
+              <View style={styles.activeLoc}>
+                <Text style={styles.locLabel}>Train</Text>
+                <Text style={styles.locVal}>{trainDisplayName}</Text>
+              </View>
+            </>
+          )}
           </View>
-          <View style={styles.addressDivider} />
-          <View style={orderState === 'delivering' ? styles.activeLoc : styles.inactiveLoc}>
-            <Text style={styles.locLabel}>Drop-off Point</Text>
-            <Text style={styles.locVal}>{order.dropoffLocation}</Text>
-          </View>
-        </View>
+        </ScrollView>
 
         <View style={styles.actionButtons}>
           <TouchableOpacity style={styles.cancelBtn} onPress={handleCancel}>
@@ -248,11 +465,11 @@ export default function RiderMapScreen() {
           <TouchableOpacity style={styles.primaryBtn} onPress={handleAction}>
             <Text style={styles.primaryBtnTxt}>
               {orderState === 'heading_to_pickup' ? 'Arrived at Pickup' :
-                orderState === 'arrived' ? 'Start Delivery' : 'Delivered'}
+                orderState === 'arrived' ? (isSubmittingPickup ? 'Saving...' : 'I Picked Up') : 'Delivered'}
             </Text>
           </TouchableOpacity>
         </View>
-      </View>
+  </View>
     </View>
   );
 }
@@ -291,6 +508,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 5,
     elevation: 10,
+    maxHeight: height * 0.52,
   },
   dragHandle: {
     width: 60,
@@ -300,6 +518,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginBottom: 20,
   },
+
   headerInfo: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -320,7 +539,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#F7F7F7',
     borderRadius: 15,
     padding: 15,
-    marginBottom: 25,
+    marginBottom: 16,
+  },
+  sheetScroll: {
+    maxHeight: height * 0.28,
+  },
+  sheetScrollContent: {
+    paddingBottom: 6,
   },
   activeLoc: {
     opacity: 1,
@@ -338,6 +563,51 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
   },
+  locSubVal: {
+    fontSize: 14,
+    color: '#6F6F6F',
+    marginTop: 4,
+  },
+  itemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  itemImage: {
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: '#EAEAEA',
+  },
+  itemPlaceholder: {
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: '#ECECEC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  itemInfo: {
+    flex: 1,
+    marginLeft: 12,
+    marginRight: 10,
+  },
+  itemName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+  itemMeta: {
+    fontSize: 12,
+    color: '#6F6F6F',
+    marginTop: 3,
+  },
+  itemTotal: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.default.primary,
+  },
+  
   addressDivider: {
     height: 1,
     backgroundColor: '#E0E0E0',
